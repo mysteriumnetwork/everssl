@@ -11,6 +11,7 @@ import (
 	"github.com/mysteriumnetwork/everssl/enumerator"
 	"github.com/mysteriumnetwork/everssl/validator"
 	"github.com/mysteriumnetwork/everssl/validator/result"
+	"github.com/mysteriumnetwork/everssl/reporter"
 )
 
 var version = "undefined"
@@ -90,7 +91,9 @@ func run() int {
 
 	var filteredResults []result.ValidationResult
 	for _, res := range results {
-		if res.Error != nil {
+		if res.Error == nil {
+			filteredResults = append(filteredResults, res)
+		} else {
 			switch res.Error.Kind() {
 			case result.ConnectionError:
 				if !*ignoreConnectionErrors {
@@ -115,9 +118,8 @@ func run() int {
 	}
 	results = nil
 
-	for _, res := range filteredResults {
-		fmt.Printf("%+v\n", res)
-	}
+	var drain reporter.Reporter = reporter.NewLogReporter()
+	drain.Report(ctx, filteredResults)
 
 	return 0
 }
