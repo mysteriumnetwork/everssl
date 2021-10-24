@@ -36,6 +36,8 @@ var (
 	ignoreHandshakeErrors    = flag.Bool("ignore-handshake-errors", true, "ignore handshake errors")
 	ignoreVerificationErrors = flag.Bool("ignore-verification-errors", true, "ignore certificate verification errors")
 	ignoreExpirationErrors   = flag.Bool("ignore-expiration-errors", false, "ignore expiration errors")
+
+	pagerDutyKey = flag.String("pagerduty-key", "", "PagerDuty Events V2 integration key")
 )
 
 func run() int {
@@ -55,6 +57,13 @@ func run() int {
 	if *CFAPIToken == "" {
 		log.Fatal("Cloudflare API token is not specified. Either set CF_API_TOKEN " +
 			"environment variable or specify -cf-api-token command line argument")
+	}
+
+	if *pagerDutyKey == "" {
+		envToken := os.Getenv("PAGERDUTY_KEY")
+		if envToken != "" {
+			*pagerDutyKey = envToken
+		}
 	}
 
 	if *zoneName == "" {
@@ -118,9 +127,17 @@ func run() int {
 	}
 	results = nil
 
-	var drain reporter.Reporter = reporter.NewMultiReporter(
-		reporter.NewLogReporter(),
-	)
+	var drain reporter.Reporter
+	if *pagerDutyKey == "" {
+		drain = reporter.NewMultiReporter(
+			reporter.NewLogReporter(),
+		)
+	} else {
+		drain = reporter.NewMultiReporter(
+			reporter.NewLogReporter(),
+			reporter.NewPagerDutyReporter(*pagerDutyKey),
+		)
+	}
 
 	err = drain.Report(ctx, filteredResults)
 	if err != nil {
