@@ -8,9 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/cloudflare/cloudflare-go"
-
-	"github.com/mysteriumnetwork/everssl/cfhelper"
+	"github.com/mysteriumnetwork/everssl/enumerator"
 )
 
 var version = "undefined"
@@ -47,34 +45,25 @@ func run() int {
 		log.Fatal("zone is not specified")
 	}
 
-	api, err := cloudflare.NewWithAPIToken(*CFAPIToken, cloudflare.UsingRetryPolicy(3, 1, 10))
+	var (
+		targetEnum enumerator.Enumerator
+		err        error
+	)
+	targetEnum, err = enumerator.NewCFEnumerator(*CFAPIToken)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("unable to construct CFEnumerator: %v", err)
 	}
 
 	ctx, cl := context.WithTimeout(context.Background(), *timeout)
 	defer cl()
 
-	zoneID, err := cfhelper.ZoneIDByName(ctx, api, *zoneName)
+	targets, err := targetEnum.Enumerate(ctx, *zoneName, *scanIPv6)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("unable to enumerate targets: %v", err)
 	}
 
-	recs, err := api.DNSRecords(ctx, zoneID, cloudflare.DNSRecord{Type: "A"})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if *scanIPv6 {
-		ipv6recs, err := api.DNSRecords(ctx, zoneID, cloudflare.DNSRecord{Type: "AAAA"})
-		if err != nil {
-			log.Fatal(err)
-		}
-		recs = append(recs, ipv6recs...)
-	}
-
-	for _, r := range recs {
-		fmt.Printf("%s: %s\n", r.Name, r.Content)
+	for _, target := range targets {
+		fmt.Printf("%+v\n", target)
 	}
 
 	return 0
