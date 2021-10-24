@@ -13,6 +13,7 @@ import (
 
 	fixedDialer "github.com/mysteriumnetwork/everssl/dialer"
 	"github.com/mysteriumnetwork/everssl/target"
+	"github.com/mysteriumnetwork/everssl/validator/result"
 )
 
 const (
@@ -35,9 +36,9 @@ func NewConcurrentValidator(expirationTreshold, rateEvery time.Duration, verify 
 	}
 }
 
-func (v *ConcurrentValidator) Validate(ctx context.Context, targets []target.Target) ([]ValidationResult, error) {
+func (v *ConcurrentValidator) Validate(ctx context.Context, targets []target.Target) ([]result.ValidationResult, error) {
 	var wg sync.WaitGroup
-	results := make([]ValidationResult, len(targets))
+	results := make([]result.ValidationResult, len(targets))
 
 	wg.Add(len(targets))
 	for idx, t := range targets {
@@ -45,7 +46,7 @@ func (v *ConcurrentValidator) Validate(ctx context.Context, targets []target.Tar
 			defer wg.Done()
 
 			err := v.validateSingle(ctx, t)
-			results[idx] = ValidationResult{
+			results[idx] = result.ValidationResult{
 				Target: t,
 				Error:  err,
 			}
@@ -56,7 +57,7 @@ func (v *ConcurrentValidator) Validate(ctx context.Context, targets []target.Tar
 	return results, nil
 }
 
-func (v *ConcurrentValidator) validateSingle(ctx context.Context, target target.Target) ValidationError {
+func (v *ConcurrentValidator) validateSingle(ctx context.Context, target target.Target) result.ValidationError {
 	var (
 		conn net.Conn
 		err  error
@@ -66,7 +67,7 @@ func (v *ConcurrentValidator) validateSingle(ctx context.Context, target target.
 	for i := 0; i < Retries; i++ {
 		err = v.limiter.Wait(ctx)
 		if err != nil {
-			return newValidationError(ConnectionError, fmt.Errorf("error waiting for ratelimit: %w", err))
+			return newValidationError(result.ConnectionError, fmt.Errorf("error waiting for ratelimit: %w", err))
 		}
 
 		ctx1, cl := context.WithTimeout(ctx, SingleAttemptTimeout)
@@ -80,7 +81,7 @@ func (v *ConcurrentValidator) validateSingle(ctx context.Context, target target.
 	}
 
 	if err != nil {
-		return newValidationError(ConnectionError, fmt.Errorf("all attempts failed. last error: %w", err))
+		return newValidationError(result.ConnectionError, fmt.Errorf("all attempts failed. last error: %w", err))
 	}
 
 	var notAfter time.Time
@@ -100,7 +101,7 @@ func (v *ConcurrentValidator) validateSingle(ctx context.Context, target target.
 				}
 				_, err := cs.PeerCertificates[0].Verify(opts)
 				if err != nil {
-					return newValidationError(VerificationError, err)
+					return newValidationError(result.VerificationError, err)
 				}
 			}
 			return nil
@@ -111,17 +112,17 @@ func (v *ConcurrentValidator) validateSingle(ctx context.Context, target target.
 	err = tlsConn.HandshakeContext(ctx)
 	if err != nil {
 		switch e := err.(type) {
-		case ValidationError:
+		case result.ValidationError:
 			return e
 		default:
-			return newValidationError(HandshakeError, fmt.Errorf("handshake failed: %w", e))
+			return newValidationError(result.HandshakeError, fmt.Errorf("handshake failed: %w", e))
 		}
 	}
 
 	now := time.Now().Truncate(0)
 	remainingDuration := notAfter.Sub(now)
 	if remainingDuration < v.expirationTreshold {
-		return newValidationError(ExpirationError, fmt.Errorf("leaf certificate will be valid only until %v", notAfter))
+		return newValidationError(result.ExpirationError, fmt.Errorf("leaf certificate will be valid only until %v", notAfter))
 	}
 
 	return nil
@@ -129,10 +130,10 @@ func (v *ConcurrentValidator) validateSingle(ctx context.Context, target target.
 
 type validationError struct {
 	wrapped error
-	kind    ValidationErrorKind
+	kind    result.ValidationErrorKind
 }
 
-func newValidationError(kind ValidationErrorKind, err error) *validationError {
+func newValidationError(kind result.ValidationErrorKind, err error) *validationError {
 	return &validationError{
 		wrapped: err,
 		kind:    kind,
@@ -147,6 +148,6 @@ func (e *validationError) Unwrap() error {
 	return e.wrapped
 }
 
-func (e *validationError) Kind() ValidationErrorKind {
+func (e *validationError) Kind() result.ValidationErrorKind {
 	return e.kind
 }

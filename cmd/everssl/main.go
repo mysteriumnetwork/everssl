@@ -10,6 +10,7 @@ import (
 
 	"github.com/mysteriumnetwork/everssl/enumerator"
 	"github.com/mysteriumnetwork/everssl/validator"
+	"github.com/mysteriumnetwork/everssl/validator/result"
 )
 
 var version = "undefined"
@@ -87,35 +88,35 @@ func run() int {
 		log.Fatal(err)
 	}
 
-	var filteredResults []validator.ValidationResult
-	for _, result := range results {
-		if result.Error != nil {
-			switch result.Error.Kind() {
-			case validator.ConnectionError:
+	var filteredResults []result.ValidationResult
+	for _, res := range results {
+		if res.Error != nil {
+			switch res.Error.Kind() {
+			case result.ConnectionError:
 				if !*ignoreConnectionErrors {
-					filteredResults = append(filteredResults, result)
+					filteredResults = append(filteredResults, res)
 				}
-			case validator.HandshakeError:
+			case result.HandshakeError:
 				if !*ignoreHandshakeErrors {
-					filteredResults = append(filteredResults, result)
+					filteredResults = append(filteredResults, res)
 				}
-			case validator.VerificationError:
+			case result.VerificationError:
 				if !*ignoreVerificationErrors {
-					filteredResults = append(filteredResults, result)
+					filteredResults = append(filteredResults, res)
 				}
-			case validator.ExpirationError:
+			case result.ExpirationError:
 				if !*ignoreExpirationErrors {
-					filteredResults = append(filteredResults, result)
+					filteredResults = append(filteredResults, res)
 				}
 			default:
-				filteredResults = append(filteredResults, result)
+				filteredResults = append(filteredResults, res)
 			}
 		}
 	}
 	results = nil
 
-	for _, result := range filteredResults {
-		fmt.Printf("%+v\n", result)
+	for _, res := range filteredResults {
+		fmt.Printf("%+v\n", res)
 	}
 
 	return 0
