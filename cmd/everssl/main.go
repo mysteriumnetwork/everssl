@@ -31,10 +31,10 @@ var (
 	verify         = flag.Bool("verify", true, "verify certificates")
 
 	// error filter options
-	ignoreConnectionErrors = flag.Bool("ignore-connection-errors", true, "ignore connection errors")
-	ignoreHandshakeErrors = flag.Bool("ignore-handshake-errors", true, "ignore handshake errors")
+	ignoreConnectionErrors   = flag.Bool("ignore-connection-errors", true, "ignore connection errors")
+	ignoreHandshakeErrors    = flag.Bool("ignore-handshake-errors", true, "ignore handshake errors")
 	ignoreVerificationErrors = flag.Bool("ignore-verification-errors", true, "ignore certificate verification errors")
-	ignoreExpirationErrors = flag.Bool("ignore-expiration-errors", false, "ignore expiration errors")
+	ignoreExpirationErrors   = flag.Bool("ignore-expiration-errors", false, "ignore expiration errors")
 )
 
 func run() int {
