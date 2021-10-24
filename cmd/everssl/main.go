@@ -118,8 +118,14 @@ func run() int {
 	}
 	results = nil
 
-	var drain reporter.Reporter = reporter.NewLogReporter()
-	drain.Report(ctx, filteredResults)
+	var drain reporter.Reporter = reporter.NewMultiReporter(
+		reporter.NewLogReporter(),
+	)
+
+	err = drain.Report(ctx, filteredResults)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	return 0
 }
