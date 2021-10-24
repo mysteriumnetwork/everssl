@@ -8,10 +8,11 @@ import (
 	"github.com/cloudflare/cloudflare-go"
 
 	"github.com/mysteriumnetwork/everssl/enumerator/cfhelper"
+	"github.com/mysteriumnetwork/everssl/target"
 )
 
 const (
-	MaxRetries = 3
+	MaxRetries        = 3
 	MinRetryDelaySecs = 1
 	MaxRetryDelaySecs = 10
 )
@@ -34,7 +35,7 @@ func NewCFEnumerator(apiToken string) (*CFEnumerator, error) {
 	}, nil
 }
 
-func (e *CFEnumerator) Enumerate(ctx context.Context, zone string, ipv6 bool) ([]Target, error) {
+func (e *CFEnumerator) Enumerate(ctx context.Context, zone string, ipv6 bool) ([]target.Target, error) {
 	zoneID, err := cfhelper.ZoneIDByName(ctx, e.api, zone)
 	if err != nil {
 		return nil, err
@@ -53,7 +54,7 @@ func (e *CFEnumerator) Enumerate(ctx context.Context, zone string, ipv6 bool) ([
 		recs = append(recs, ipv6recs...)
 	}
 
-	var res []Target
+	var res []target.Target
 
 	for _, record := range recs {
 		ip := net.ParseIP(record.Content)
@@ -69,15 +70,15 @@ func (e *CFEnumerator) Enumerate(ctx context.Context, zone string, ipv6 bool) ([
 		}
 
 		// Add target for the domain name directly to origin server
-		res = append(res, Target{
-			Domain: record.Name,
+		res = append(res, target.Target{
+			Domain:     record.Name,
 			IPOverride: ip.String(),
 		})
 
 		if record.Proxied != nil && *record.Proxied {
 			// Add target for the domain name via CF
-			res = append(res, Target{
-				Domain: record.Name,
+			res = append(res, target.Target{
+				Domain:     record.Name,
 				IPOverride: "",
 			})
 		}

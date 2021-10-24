@@ -2,13 +2,10 @@ package enumerator
 
 import (
 	"context"
+
+	"github.com/mysteriumnetwork/everssl/target"
 )
 
-type Target struct {
-	Domain string
-	IPOverride string
-}
-
 type Enumerator interface {
-	Enumerate(ctx context.Context, zone string, ipv6 bool) ([]Target, error)
+	Enumerate(ctx context.Context, zone string, ipv6 bool) ([]target.Target, error)
 }

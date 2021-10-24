@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/mysteriumnetwork/everssl/enumerator"
+	"github.com/mysteriumnetwork/everssl/validator"
 )
 
 var version = "undefined"
@@ -16,10 +17,15 @@ var version = "undefined"
 var (
 	showVersion = flag.Bool("version", false, "show program version and exit")
 
+	timeout = flag.Duration("timeout", 1*time.Minute, "overall scan timeout")
+
 	CFAPIToken = flag.String("cf-api-token", "", "Cloudflare API token")
 	zoneName   = flag.String("zone", "", "requested zone (domain) name")
-	timeout    = flag.Duration("timeout", 1*time.Minute, "overall scan timeout")
 	scanIPv6   = flag.Bool("6", false, "scan IPv6 origins")
+
+	expireTreshold = flag.Duration("expire-treshold", 7*24*time.Hour, "expiration alarm treshold")
+	rateLimitEvery = flag.Duration("rate-every", 100*time.Millisecond, "ratelimit period (inverse of frequency)")
+	verify         = flag.Bool("verify", true, "verify certificates")
 )
 
 func run() int {
@@ -62,8 +68,19 @@ func run() int {
 		log.Fatalf("unable to enumerate targets: %v", err)
 	}
 
-	for _, target := range targets {
-		fmt.Printf("%+v\n", target)
+	var targetValidator validator.Validator = validator.NewConcurrentValidator(
+		*expireTreshold,
+		*rateLimitEvery,
+		*verify,
+	)
+
+	results, err := targetValidator.Validate(ctx, targets)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, result := range results {
+		fmt.Printf("%+v\n", result)
 	}
 
 	return 0
