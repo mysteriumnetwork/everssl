@@ -12,6 +12,7 @@ import (
 	"github.com/mysteriumnetwork/everssl/reporter"
 	"github.com/mysteriumnetwork/everssl/validator"
 	"github.com/mysteriumnetwork/everssl/validator/result"
+	"github.com/mysteriumnetwork/everssl/heartbeat"
 )
 
 var version = "undefined"
@@ -38,6 +39,8 @@ var (
 	ignoreExpirationErrors   = flag.Bool("ignore-expiration-errors", false, "ignore expiration errors")
 
 	pagerDutyKey = flag.String("pagerduty-key", "", "PagerDuty Events V2 integration key")
+
+	heartbeatURL = flag.String("heartbeat-url", "", "heartbeat URL, URL to GET after successful finish")
 )
 
 func run() int {
@@ -63,6 +66,13 @@ func run() int {
 		envToken := os.Getenv("PAGERDUTY_KEY")
 		if envToken != "" {
 			*pagerDutyKey = envToken
+		}
+	}
+
+	if *heartbeatURL == "" {
+		envToken := os.Getenv("HEARTBEAT_URL")
+		if envToken != "" {
+			*heartbeatURL = envToken
 		}
 	}
 
@@ -142,6 +152,14 @@ func run() int {
 	err = drain.Report(ctx, filteredResults)
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	if *heartbeatURL != "" {
+		var beat heartbeat.Heartbeat = heartbeat.NewURLHeartbeat(*heartbeatURL)
+		err = beat.Beat(ctx)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	return 0
