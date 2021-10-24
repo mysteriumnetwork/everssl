@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"golang.org/x/net/idna"
 	"github.com/cloudflare/cloudflare-go"
+	"golang.org/x/net/idna"
 )
 
 // normalizeZoneName tries to convert IDNs (international domain names)
