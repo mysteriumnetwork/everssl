@@ -80,7 +80,9 @@ func run() int {
 	}
 
 	for _, result := range results {
-		fmt.Printf("%+v\n", result)
+		if result.Error != nil {
+			fmt.Printf("%+v\n", result)
+		}
 	}
 
 	return 0
