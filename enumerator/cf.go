@@ -68,17 +68,17 @@ func (e *CFEnumerator) Enumerate(ctx context.Context, zone string, ipv6 bool) ([
 			continue
 		}
 
-		// Add target for the domain name via CF
+		// Add target for the domain name directly to origin server
 		res = append(res, Target{
 			Domain: record.Name,
-			IPOverride: "",
+			IPOverride: ip.String(),
 		})
 
-		// Add target for the domain name directly to origin server
 		if record.Proxied != nil && *record.Proxied {
+			// Add target for the domain name via CF
 			res = append(res, Target{
 				Domain: record.Name,
-				IPOverride: ip.String(),
+				IPOverride: "",
 			})
 		}
 	}
