@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"log"
 	"net"
 	"sync"
 	"time"
@@ -57,7 +56,7 @@ func (v *ConcurrentValidator) Validate(ctx context.Context, targets []target.Tar
 	return results, nil
 }
 
-func (v *ConcurrentValidator) validateSingle(ctx context.Context, target target.Target) error {
+func (v *ConcurrentValidator) validateSingle(ctx context.Context, target target.Target) ValidationError {
 	var (
 		conn net.Conn
 		err  error
@@ -67,7 +66,7 @@ func (v *ConcurrentValidator) validateSingle(ctx context.Context, target target.
 	for i := 0; i < Retries; i++ {
 		err = v.limiter.Wait(ctx)
 		if err != nil {
-			return err
+			return newValidationError(ConnectionError, fmt.Errorf("error waiting for ratelimit: %w", err))
 		}
 
 		ctx1, cl := context.WithTimeout(ctx, SingleAttemptTimeout)
@@ -75,14 +74,13 @@ func (v *ConcurrentValidator) validateSingle(ctx context.Context, target target.
 
 		conn, err = dialer.DialContext(ctx1, "tcp", net.JoinHostPort(target.Domain, "443"))
 		if err != nil {
-			log.Printf("dialing error for target %+v: %v", target, err)
 			continue
 		}
 		defer conn.Close()
 	}
 
 	if err != nil {
-		return fmt.Errorf("all attempts failed. last error: %w", err)
+		return newValidationError(ConnectionError, fmt.Errorf("all attempts failed. last error: %w", err))
 	}
 
 	var notAfter time.Time
@@ -101,7 +99,9 @@ func (v *ConcurrentValidator) validateSingle(ctx context.Context, target target.
 					opts.Intermediates.AddCert(cert)
 				}
 				_, err := cs.PeerCertificates[0].Verify(opts)
-				return err
+				if err != nil {
+					return newValidationError(VerificationError, err)
+				}
 			}
 			return nil
 		},
@@ -110,15 +110,43 @@ func (v *ConcurrentValidator) validateSingle(ctx context.Context, target target.
 
 	err = tlsConn.HandshakeContext(ctx)
 	if err != nil {
-		return err
+		switch e := err.(type) {
+		case ValidationError:
+			return e
+		default:
+			return newValidationError(HandshakeError, fmt.Errorf("handshake failed: %w", e))
+		}
 	}
 
 	now := time.Now().Truncate(0)
 	remainingDuration := notAfter.Sub(now)
 	if remainingDuration < v.expirationTreshold {
-		return fmt.Errorf("leaf certificate will be valid only for %v (treshold %v)",
-			remainingDuration, v.expirationTreshold)
+		return newValidationError(ExpirationError, fmt.Errorf("leaf certificate will be valid only until %v", notAfter))
 	}
 
 	return nil
+}
+
+type validationError struct {
+	wrapped error
+	kind    ValidationErrorKind
+}
+
+func newValidationError(kind ValidationErrorKind, err error) *validationError {
+	return &validationError{
+		wrapped: err,
+		kind:    kind,
+	}
+}
+
+func (e *validationError) Error() string {
+	return e.wrapped.Error()
+}
+
+func (e *validationError) Unwrap() error {
+	return e.wrapped
+}
+
+func (e *validationError) Kind() ValidationErrorKind {
+	return e.kind
 }

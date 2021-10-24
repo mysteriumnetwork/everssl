@@ -15,17 +15,25 @@ import (
 var version = "undefined"
 
 var (
+	// global options
 	showVersion = flag.Bool("version", false, "show program version and exit")
+	timeout     = flag.Duration("timeout", 5*time.Minute, "overall scan timeout")
 
-	timeout = flag.Duration("timeout", 1*time.Minute, "overall scan timeout")
-
+	// enumerator options
 	CFAPIToken = flag.String("cf-api-token", "", "Cloudflare API token")
 	zoneName   = flag.String("zone", "", "requested zone (domain) name")
-	scanIPv6   = flag.Bool("6", false, "scan IPv6 origins")
+	scanIPv6   = flag.Bool("6", true, "scan IPv6 origins")
 
-	expireTreshold = flag.Duration("expire-treshold", 7*24*time.Hour, "expiration alarm treshold")
+	// validator options
+	expireTreshold = flag.Duration("expire-treshold", 14*24*time.Hour, "expiration alarm treshold")
 	rateLimitEvery = flag.Duration("rate-every", 100*time.Millisecond, "ratelimit period (inverse of frequency)")
 	verify         = flag.Bool("verify", true, "verify certificates")
+
+	// error filter options
+	ignoreConnectionErrors = flag.Bool("ignore-connection-errors", true, "ignore connection errors")
+	ignoreHandshakeErrors = flag.Bool("ignore-handshake-errors", true, "ignore handshake errors")
+	ignoreVerificationErrors = flag.Bool("ignore-verification-errors", true, "ignore certificate verification errors")
+	ignoreExpirationErrors = flag.Bool("ignore-expiration-errors", false, "ignore expiration errors")
 )
 
 func run() int {
@@ -79,10 +87,35 @@ func run() int {
 		log.Fatal(err)
 	}
 
+	var filteredResults []validator.ValidationResult
 	for _, result := range results {
 		if result.Error != nil {
-			fmt.Printf("%+v\n", result)
+			switch result.Error.Kind() {
+			case validator.ConnectionError:
+				if !*ignoreConnectionErrors {
+					filteredResults = append(filteredResults, result)
+				}
+			case validator.HandshakeError:
+				if !*ignoreHandshakeErrors {
+					filteredResults = append(filteredResults, result)
+				}
+			case validator.VerificationError:
+				if !*ignoreVerificationErrors {
+					filteredResults = append(filteredResults, result)
+				}
+			case validator.ExpirationError:
+				if !*ignoreExpirationErrors {
+					filteredResults = append(filteredResults, result)
+				}
+			default:
+				filteredResults = append(filteredResults, result)
+			}
 		}
+	}
+	results = nil
+
+	for _, result := range filteredResults {
+		fmt.Printf("%+v\n", result)
 	}
 
 	return 0

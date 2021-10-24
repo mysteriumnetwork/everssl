@@ -8,9 +8,24 @@ import (
 
 type ValidationResult struct {
 	Target target.Target
-	Error  error
+	Error  ValidationError
 }
 
 type Validator interface {
 	Validate(context.Context, []target.Target) ([]ValidationResult, error)
+}
+
+type ValidationErrorKind int
+
+const (
+	ConnectionError   = ValidationErrorKind(iota)
+	HandshakeError    = ValidationErrorKind(iota)
+	VerificationError = ValidationErrorKind(iota)
+	ExpirationError   = ValidationErrorKind(iota)
+)
+
+type ValidationError interface {
+	error
+	Unwrap() error
+	Kind() ValidationErrorKind
 }
