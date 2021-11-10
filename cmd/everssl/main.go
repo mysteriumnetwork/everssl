@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/mysteriumnetwork/everssl/enumerator"
+	"github.com/mysteriumnetwork/everssl/heartbeat"
 	"github.com/mysteriumnetwork/everssl/reporter"
 	"github.com/mysteriumnetwork/everssl/validator"
 	"github.com/mysteriumnetwork/everssl/validator/result"
-	"github.com/mysteriumnetwork/everssl/heartbeat"
 )
 
 var version = "undefined"

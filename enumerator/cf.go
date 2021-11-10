@@ -2,7 +2,6 @@ package enumerator
 
 import (
 	"context"
-	"log"
 	"net"
 
 	"github.com/cloudflare/cloudflare-go"
@@ -85,28 +84,30 @@ func (e *CFEnumerator) enumerateDomain(ctx context.Context, zoneID string, ipv6 
 
 	for _, record := range recs {
 		ip := net.ParseIP(record.Content)
-		if ip == nil {
-			log.Printf("WARNING! IP %q parse failed for record %s (ID=%q). Skipping it...",
-				record.Content, record.Name, record.ID)
-			continue
+
+		var fakeOrigin bool
+		if ip != nil && ip.Equal(CFWorkersBackendAddress) {
+			fakeOrigin = false
+		} else {
+			fakeOrigin = true
 		}
 
-		// Skip fake address records created for originless domains
-		if ip.Equal(CFWorkersBackendAddress) {
-			continue
-		}
+		hasFront := record.Proxied != nil && *record.Proxied
+		checkOrigin := !(hasFront && fakeOrigin)
 
 		// Add target for the domain name directly to origin server
-		res = append(res, target.Target{
-			Domain:     record.Name,
-			IPOverride: ip.String(),
-		})
-
-		if record.Proxied != nil && *record.Proxied {
-			// Add target for the domain name via CF
+		if checkOrigin {
 			res = append(res, target.Target{
-				Domain:     record.Name,
-				IPOverride: "",
+				Domain:  record.Name,
+				Address: record.Content,
+			})
+		}
+
+		// Add target for the domain name via CF
+		if hasFront {
+			res = append(res, target.Target{
+				Domain:  record.Name,
+				Address: "",
 			})
 		}
 	}
