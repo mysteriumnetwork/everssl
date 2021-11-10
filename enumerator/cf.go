@@ -36,11 +36,38 @@ func NewCFEnumerator(apiToken string) (*CFEnumerator, error) {
 }
 
 func (e *CFEnumerator) Enumerate(ctx context.Context, zone string, ipv6 bool) ([]target.Target, error) {
+	if zone == "__all__" {
+		return e.enumerateAllDomains(ctx, ipv6)
+	}
+
 	zoneID, err := cfhelper.ZoneIDByName(ctx, e.api, zone)
 	if err != nil {
 		return nil, err
 	}
 
+	return e.enumerateDomain(ctx, zoneID, ipv6)
+}
+
+func (e *CFEnumerator) enumerateAllDomains(ctx context.Context, ipv6 bool) ([]target.Target, error) {
+	zones, err := e.api.ListZones(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var result []target.Target
+	for _, zone := range zones {
+		zoneTargets, err := e.enumerateDomain(ctx, zone.ID, ipv6)
+		if err != nil {
+			return nil, err
+		}
+
+		result = append(result, zoneTargets...)
+	}
+
+	return result, nil
+}
+
+func (e *CFEnumerator) enumerateDomain(ctx context.Context, zoneID string, ipv6 bool) ([]target.Target, error) {
 	recs, err := e.api.DNSRecords(ctx, zoneID, cloudflare.DNSRecord{Type: "A"})
 	if err != nil {
 		return nil, err
