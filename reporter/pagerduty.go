@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hashicorp/go-multierror"
 	"github.com/PagerDuty/go-pagerduty"
+	"github.com/hashicorp/go-multierror"
 
 	"github.com/mysteriumnetwork/everssl/validator/result"
 )
@@ -31,12 +31,12 @@ func (r *PagerDutyReporter) Report(ctx context.Context, results []result.Validat
 
 		event := pagerduty.V2Event{
 			RoutingKey: r.routingKey,
-			Action: "trigger",
-			DedupKey: fmt.Sprintf("%s/%s", res.Target.Domain, res.Target.IPOverride),
+			Action:     "trigger",
+			DedupKey:   fmt.Sprintf("%s/%s", res.Target.Domain, res.Target.Address),
 			Payload: &pagerduty.V2Payload{
-				Summary: res.Error.Error(),
-				Source: fmt.Sprintf("https://%s/", res.Target.Domain),
-				Severity: "warning",
+				Summary:   res.Error.Error(),
+				Source:    fmt.Sprintf("https://%s/", res.Target.Domain),
+				Severity:  "warning",
 				Timestamp: time.Now().UTC().Format(time.RFC3339),
 			},
 		}

@@ -62,7 +62,7 @@ func (v *ConcurrentValidator) validateSingle(ctx context.Context, target target.
 		conn net.Conn
 		err  error
 	)
-	dialer := fixedDialer.NewFixedDialer(target.IPOverride, "", &net.Dialer{})
+	dialer := fixedDialer.NewFixedDialer(target.Address, "", &net.Dialer{})
 
 	for i := 0; i < Retries; i++ {
 		err = v.limiter.Wait(ctx)

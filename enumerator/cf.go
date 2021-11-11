@@ -2,7 +2,6 @@ package enumerator
 
 import (
 	"context"
-	"log"
 	"net"
 
 	"github.com/cloudflare/cloudflare-go"
@@ -36,11 +35,38 @@ func NewCFEnumerator(apiToken string) (*CFEnumerator, error) {
 }
 
 func (e *CFEnumerator) Enumerate(ctx context.Context, zone string, ipv6 bool) ([]target.Target, error) {
+	if zone == "__all__" {
+		return e.enumerateAllDomains(ctx, ipv6)
+	}
+
 	zoneID, err := cfhelper.ZoneIDByName(ctx, e.api, zone)
 	if err != nil {
 		return nil, err
 	}
 
+	return e.enumerateDomain(ctx, zoneID, ipv6)
+}
+
+func (e *CFEnumerator) enumerateAllDomains(ctx context.Context, ipv6 bool) ([]target.Target, error) {
+	zones, err := e.api.ListZones(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var result []target.Target
+	for _, zone := range zones {
+		zoneTargets, err := e.enumerateDomain(ctx, zone.ID, ipv6)
+		if err != nil {
+			return nil, err
+		}
+
+		result = append(result, zoneTargets...)
+	}
+
+	return result, nil
+}
+
+func (e *CFEnumerator) enumerateDomain(ctx context.Context, zoneID string, ipv6 bool) ([]target.Target, error) {
 	recs, err := e.api.DNSRecords(ctx, zoneID, cloudflare.DNSRecord{Type: "A"})
 	if err != nil {
 		return nil, err
@@ -58,28 +84,53 @@ func (e *CFEnumerator) Enumerate(ctx context.Context, zone string, ipv6 bool) ([
 
 	for _, record := range recs {
 		ip := net.ParseIP(record.Content)
-		if ip == nil {
-			log.Printf("WARNING! IP %q parse failed for record %s (ID=%q). Skipping it...",
-				record.Content, record.Name, record.ID)
-			continue
+
+		var fakeOrigin bool
+		if ip != nil && ip.Equal(CFWorkersBackendAddress) {
+			fakeOrigin = false
+		} else {
+			fakeOrigin = true
 		}
 
-		// Skip fake address records created for originless domains
-		if ip.Equal(CFWorkersBackendAddress) {
-			continue
+		hasFront := record.Proxied != nil && *record.Proxied
+		checkOrigin := !(hasFront && fakeOrigin)
+
+		// Add target for the domain name directly to origin server
+		if checkOrigin {
+			res = append(res, target.Target{
+				Domain:  record.Name,
+				Address: record.Content,
+			})
 		}
+
+		// Add target for the domain name via CF
+		if hasFront {
+			res = append(res, target.Target{
+				Domain:  record.Name,
+				Address: "",
+			})
+		}
+	}
+
+	cnameRecs, err := e.api.DNSRecords(ctx, zoneID, cloudflare.DNSRecord{Type: "CNAME"})
+	if err != nil {
+		return nil, err
+	}
+
+	for _, record := range cnameRecs {
+		hasFront := record.Proxied != nil && *record.Proxied
 
 		// Add target for the domain name directly to origin server
 		res = append(res, target.Target{
-			Domain:     record.Name,
-			IPOverride: ip.String(),
+			Domain:  record.Content,
+			Address: "",
 		})
 
-		if record.Proxied != nil && *record.Proxied {
-			// Add target for the domain name via CF
+		// Add target for the domain name via CF
+		if hasFront {
 			res = append(res, target.Target{
-				Domain:     record.Name,
-				IPOverride: "",
+				Domain:  record.Name,
+				Address: "",
 			})
 		}
 	}

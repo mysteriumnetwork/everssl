@@ -9,10 +9,11 @@ import (
 	"time"
 
 	"github.com/mysteriumnetwork/everssl/enumerator"
+	"github.com/mysteriumnetwork/everssl/heartbeat"
 	"github.com/mysteriumnetwork/everssl/reporter"
+	"github.com/mysteriumnetwork/everssl/target"
 	"github.com/mysteriumnetwork/everssl/validator"
 	"github.com/mysteriumnetwork/everssl/validator/result"
-	"github.com/mysteriumnetwork/everssl/heartbeat"
 )
 
 var version = "undefined"
@@ -24,7 +25,6 @@ var (
 
 	// enumerator options
 	CFAPIToken = flag.String("cf-api-token", "", "Cloudflare API token")
-	zoneName   = flag.String("zone", "", "requested zone (domain) name")
 	scanIPv6   = flag.Bool("6", true, "scan IPv6 origins")
 
 	// validator options
@@ -76,8 +76,9 @@ func run() int {
 		}
 	}
 
-	if *zoneName == "" {
-		log.Fatal("zone is not specified")
+	zones := flag.Args()
+	if len(zones) == 0 {
+		log.Fatal("please pass zone names as a positional arguments or specify \"__all__\"")
 	}
 
 	var (
@@ -92,9 +93,14 @@ func run() int {
 	ctx, cl := context.WithTimeout(context.Background(), *timeout)
 	defer cl()
 
-	targets, err := targetEnum.Enumerate(ctx, *zoneName, *scanIPv6)
-	if err != nil {
-		log.Fatalf("unable to enumerate targets: %v", err)
+	var targets []target.Target
+	for _, zoneName := range zones {
+		zoneTargets, err := targetEnum.Enumerate(ctx, zoneName, *scanIPv6)
+		if err != nil {
+			log.Fatalf("unable to enumerate targets for zone %s: %v", zoneName, err)
+		}
+
+		targets = append(targets, zoneTargets...)
 	}
 
 	var targetValidator validator.Validator = validator.NewConcurrentValidator(
@@ -166,6 +172,10 @@ func run() int {
 }
 
 func main() {
+	flag.Usage = func() {
+		fmt.Fprintf(flag.CommandLine.Output(), "Usage: %s [OPTIONS...] ZONE...\n", os.Args[0])
+		flag.PrintDefaults()
+	}
 	log.Default().SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile)
 	os.Exit(run())
 }
