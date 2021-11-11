@@ -39,7 +39,7 @@ CLI arguments take precedence over environment variables.
 
 ```
 $ ./bin/everssl -h
-Usage of ./bin/everssl:
+Usage: ./bin/everssl [OPTIONS...] ZONE...
   -6	scan IPv6 origins (default true)
   -cf-api-token string
     	Cloudflare API token
@@ -65,6 +65,4 @@ Usage of ./bin/everssl:
     	verify certificates (default true)
   -version
     	show program version and exit
-  -zone string
-    	requested zone (domain) name
 ```
