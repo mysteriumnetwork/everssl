@@ -47,6 +47,8 @@ Usage: ./bin/everssl [OPTIONS...] ZONE...
     	expiration alarm treshold (default 336h0m0s)
   -heartbeat-url string
     	heartbeat URL, URL to GET after successful finish
+  -ignore string
+    	regular expressions which matching domains to ignore (default "\\b\\B")
   -ignore-connection-errors
     	ignore connection errors (default true)
   -ignore-expiration-errors
