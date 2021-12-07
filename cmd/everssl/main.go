@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"regexp"
 	"time"
 
 	"github.com/mysteriumnetwork/everssl/enumerator"
@@ -26,6 +27,7 @@ var (
 	// enumerator options
 	CFAPIToken = flag.String("cf-api-token", "", "Cloudflare API token")
 	scanIPv6   = flag.Bool("6", true, "scan IPv6 origins")
+	ignoreRE   = flag.String("ignore", `\b\B`, "regular expressions which matching domains to ignore")
 
 	// validator options
 	expireTreshold = flag.Duration("expire-treshold", 14*24*time.Hour, "expiration alarm treshold")
@@ -81,11 +83,12 @@ func run() int {
 		log.Fatal("please pass zone names as a positional arguments or specify \"__all__\"")
 	}
 
-	var (
-		targetEnum enumerator.Enumerator
-		err        error
-	)
-	targetEnum, err = enumerator.NewCFEnumerator(*CFAPIToken)
+	domainFilter, err := regexp.Compile(*ignoreRE)
+	if err != nil {
+		log.Fatalf("domain ignore regexp compilation error: %v", err)
+	}
+
+	targetEnum, err := enumerator.NewCFEnumerator(*CFAPIToken)
 	if err != nil {
 		log.Fatalf("unable to construct CFEnumerator: %v", err)
 	}
@@ -100,7 +103,11 @@ func run() int {
 			log.Fatalf("unable to enumerate targets for zone %s: %v", zoneName, err)
 		}
 
-		targets = append(targets, zoneTargets...)
+		for _, target := range zoneTargets {
+			if !domainFilter.MatchString(target.Domain) {
+				targets = append(targets, target)
+			}
+		}
 	}
 
 	var targetValidator validator.Validator = validator.NewConcurrentValidator(
