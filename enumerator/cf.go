@@ -67,6 +67,8 @@ func (e *CFEnumerator) enumerateAllDomains(ctx context.Context, ipv6 bool) ([]ta
 }
 
 func (e *CFEnumerator) enumerateDomain(ctx context.Context, zoneID string, ipv6 bool) ([]target.Target, error) {
+	targets := make(map[target.Target]struct{})
+
 	recs, err := e.api.DNSRecords(ctx, zoneID, cloudflare.DNSRecord{Type: "A"})
 	if err != nil {
 		return nil, err
@@ -79,8 +81,6 @@ func (e *CFEnumerator) enumerateDomain(ctx context.Context, zoneID string, ipv6 
 		}
 		recs = append(recs, ipv6recs...)
 	}
-
-	var res []target.Target
 
 	for _, record := range recs {
 		ip := net.ParseIP(record.Content)
@@ -97,17 +97,17 @@ func (e *CFEnumerator) enumerateDomain(ctx context.Context, zoneID string, ipv6 
 
 		// Add target for the domain name directly to origin server
 		if checkOrigin {
-			res = append(res, target.Target{
+			targets[target.Target{
 				Domain:  record.Name,
 				Address: record.Content,
-			})
+			}] = struct{}{}
 		}
 
 		// Add target for the domain name via CF
-		res = append(res, target.Target{
+		targets[target.Target{
 			Domain:  record.Name,
 			Address: "",
-		})
+		}] = struct{}{}
 	}
 
 	cnameRecs, err := e.api.DNSRecords(ctx, zoneID, cloudflare.DNSRecord{Type: "CNAME"})
@@ -120,17 +120,23 @@ func (e *CFEnumerator) enumerateDomain(ctx context.Context, zoneID string, ipv6 
 
 		// Add target for the domain name directly to origin server
 		if checkOrigin {
-			res = append(res, target.Target{
+			targets[target.Target{
 				Domain:  record.Name,
 				Address: record.Content,
-			})
+			}] = struct{}{}
 		}
 
 		// Add target for the domain name via CF
-		res = append(res, target.Target{
+		targets[target.Target{
 			Domain:  record.Name,
 			Address: "",
-		})
+		}] = struct{}{}
+	}
+
+	res := make([]target.Target, 0, len(targets))
+
+	for k, _ := range targets {
+		res = append(res, k)
 	}
 
 	return res, nil
