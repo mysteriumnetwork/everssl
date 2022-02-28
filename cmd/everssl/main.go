@@ -23,6 +23,8 @@ var (
 	// global options
 	showVersion = flag.Bool("version", false, "show program version and exit")
 	timeout     = flag.Duration("timeout", 5*time.Minute, "overall scan timeout")
+	oneTimeout  = flag.Duration("1-timeout", 15*time.Second, "timeout for one connection")
+	retries     = flag.Int("retries", 3, "validation retries")
 
 	// enumerator options
 	CFAPIToken = flag.String("cf-api-token", "", "Cloudflare API token")
@@ -113,6 +115,8 @@ func run() int {
 	var targetValidator validator.Validator = validator.NewConcurrentValidator(
 		*expireTreshold,
 		*rateLimitEvery,
+		*oneTimeout,
+		*retries,
 		*verify,
 	)
 
