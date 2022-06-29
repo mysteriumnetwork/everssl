@@ -12,9 +12,8 @@ import (
 	"github.com/mysteriumnetwork/everssl/enumerator"
 	"github.com/mysteriumnetwork/everssl/heartbeat"
 	"github.com/mysteriumnetwork/everssl/reporter"
-	"github.com/mysteriumnetwork/everssl/target"
 	"github.com/mysteriumnetwork/everssl/validator"
-	"github.com/mysteriumnetwork/everssl/validator/result"
+	"github.com/mysteriumnetwork/everssl/workflow"
 )
 
 var version = "undefined"
@@ -98,61 +97,13 @@ func run() int {
 	ctx, cl := context.WithTimeout(context.Background(), *timeout)
 	defer cl()
 
-	var targets []target.Target
-	for _, zoneName := range zones {
-		zoneTargets, err := targetEnum.Enumerate(ctx, zoneName, *scanIPv6)
-		if err != nil {
-			log.Fatalf("unable to enumerate targets for zone %s: %v", zoneName, err)
-		}
-
-		for _, target := range zoneTargets {
-			if !domainFilter.MatchString(target.Domain) {
-				targets = append(targets, target)
-			}
-		}
-	}
-
-	var targetValidator validator.Validator = validator.NewConcurrentValidator(
+	targetValidator := validator.NewConcurrentValidator(
 		*expireTreshold,
 		*rateLimitEvery,
 		*oneTimeout,
 		*retries,
 		*verify,
 	)
-
-	results, err := targetValidator.Validate(ctx, targets)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	var filteredResults []result.ValidationResult
-	for _, res := range results {
-		if res.Error == nil {
-			filteredResults = append(filteredResults, res)
-		} else {
-			switch res.Error.Kind() {
-			case result.ConnectionError:
-				if !*ignoreConnectionErrors {
-					filteredResults = append(filteredResults, res)
-				}
-			case result.HandshakeError:
-				if !*ignoreHandshakeErrors {
-					filteredResults = append(filteredResults, res)
-				}
-			case result.VerificationError:
-				if !*ignoreVerificationErrors {
-					filteredResults = append(filteredResults, res)
-				}
-			case result.ExpirationError:
-				if !*ignoreExpirationErrors {
-					filteredResults = append(filteredResults, res)
-				}
-			default:
-				filteredResults = append(filteredResults, res)
-			}
-		}
-	}
-	results = nil
 
 	var drain reporter.Reporter
 	if *pagerDutyKey == "" {
@@ -166,17 +117,22 @@ func run() int {
 		)
 	}
 
-	err = drain.Report(ctx, filteredResults)
-	if err != nil {
-		log.Fatal(err)
+	var beat heartbeat.Heartbeat = heartbeat.NewLogHeartbeat()
+	if *heartbeatURL != "" {
+		beat = heartbeat.NewURLHeartbeat(*heartbeatURL)
 	}
 
-	if *heartbeatURL != "" {
-		var beat heartbeat.Heartbeat = heartbeat.NewURLHeartbeat(*heartbeatURL)
-		err = beat.Beat(ctx)
-		if err != nil {
-			log.Fatal(err)
-		}
+	runner := workflow.NewRunner(targetEnum, domainFilter, targetValidator, drain, beat)
+	err = runner.Run(ctx,
+		zones,
+		*scanIPv6,
+		*ignoreConnectionErrors,
+		*ignoreHandshakeErrors,
+		*ignoreVerificationErrors,
+		*ignoreExpirationErrors,
+	)
+	if err != nil {
+		log.Fatalf("workflow error: %v", err)
 	}
 
 	return 0
