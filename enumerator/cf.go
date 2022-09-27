@@ -2,7 +2,9 @@ package enumerator
 
 import (
 	"context"
+	"fmt"
 	"net"
+	"sync"
 
 	"github.com/cloudflare/cloudflare-go"
 
@@ -19,18 +21,21 @@ const (
 var CFWorkersBackendAddress = net.ParseIP("100::")
 
 type CFEnumerator struct {
-	api *cloudflare.API
+	api           *cloudflare.API
+	poolAddresses map[string][]string
+	paMux         sync.RWMutex
 }
 
 func NewCFEnumerator(apiToken string) (*CFEnumerator, error) {
 	api, err := cloudflare.NewWithAPIToken(apiToken,
 		cloudflare.UsingRetryPolicy(MaxRetries, MinRetryDelaySecs, MaxRetryDelaySecs))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("can't instantiate Cloudflare API client: %w", err)
 	}
 
 	return &CFEnumerator{
-		api: api,
+		api:           api,
+		poolAddresses: make(map[string][]string),
 	}, nil
 }
 
@@ -41,23 +46,46 @@ func (e *CFEnumerator) Enumerate(ctx context.Context, zone string, ipv6 bool) ([
 
 	zoneID, err := cfhelper.ZoneIDByName(ctx, e.api, zone)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ZoneIDByName failed: %w", err)
 	}
 
 	return e.enumerateDomain(ctx, zoneID, ipv6)
 }
 
+func (e *CFEnumerator) resolveLBPool(ctx context.Context, poolID string) ([]string, error) {
+	e.paMux.RLock()
+	addresses, ok := e.poolAddresses[poolID]
+	e.paMux.RUnlock()
+	if ok {
+		return addresses, nil
+	}
+
+	pool, err := e.api.LoadBalancerPoolDetails(ctx, poolID)
+	if err != nil {
+		return nil, fmt.Errorf("LoadBalancerPoolDetails failed: %w", err)
+	}
+	for _, origin := range pool.Origins {
+		addresses = append(addresses, origin.Address)
+	}
+
+	e.paMux.Lock()
+	defer e.paMux.Unlock()
+	e.poolAddresses[poolID] = addresses
+
+	return addresses, nil
+}
+
 func (e *CFEnumerator) enumerateAllDomains(ctx context.Context, ipv6 bool) ([]target.Target, error) {
 	zones, err := e.api.ListZones(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ListZones failed: %w", err)
 	}
 
 	var result []target.Target
 	for _, zone := range zones {
 		zoneTargets, err := e.enumerateDomain(ctx, zone.ID, ipv6)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("enumerateDomain failed: %w", err)
 		}
 
 		result = append(result, zoneTargets...)
@@ -71,7 +99,7 @@ func (e *CFEnumerator) enumerateDomain(ctx context.Context, zoneID string, ipv6 
 
 	unfilteredRecs, err := e.api.DNSRecords(ctx, zoneID, cloudflare.DNSRecord{})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("DNSRecords failed: %w", err)
 	}
 
 	var recs []cloudflare.DNSRecord
@@ -117,6 +145,46 @@ func (e *CFEnumerator) enumerateDomain(ctx context.Context, zoneID string, ipv6 
 			Domain:  record.Name,
 			Address: "",
 		}] = struct{}{}
+	}
+
+	lbs, err := e.api.ListLoadBalancers(ctx, zoneID)
+	if err != nil {
+		return nil, fmt.Errorf("ListLoadBalancers failed: %w", err)
+	}
+
+	for _, lb := range lbs {
+		if lb.Proxied {
+			targets[target.Target{
+				Domain:  lb.Name,
+				Address: "",
+			}] = struct{}{}
+		}
+		pools := lb.DefaultPools
+		pools = append(pools, lb.FallbackPool)
+		for _, pool := range lb.RegionPools {
+			pools = append(pools, pool...)
+		}
+		for _, pool := range lb.PopPools {
+			pools = append(pools, pool...)
+		}
+		for _, pool := range lb.CountryPools {
+			pools = append(pools, pool...)
+		}
+
+		for _, pool := range pools {
+			addresses, err := e.resolveLBPool(ctx, pool)
+			if err != nil {
+				return nil, fmt.Errorf("resolveLBPool failed: %w", err)
+			}
+
+			for _, addr := range addresses {
+				targets[target.Target{
+					Domain:  lb.Name,
+					Address: addr,
+				}] = struct{}{}
+			}
+		}
+
 	}
 
 	res := make([]target.Target, 0, len(targets))
