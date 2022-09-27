@@ -115,7 +115,8 @@ func (e *CFEnumerator) enumerateDomain(ctx context.Context, zoneID string, ipv6 
 	}
 
 	for _, record := range recs {
-		var checkOrigin bool
+		checkOrigin := true
+		checkProxy := true
 		switch record.Type {
 		case "A", "AAAA":
 			ip := net.ParseIP(record.Content)
@@ -127,11 +128,13 @@ func (e *CFEnumerator) enumerateDomain(ctx context.Context, zoneID string, ipv6 
 				fakeOrigin = true
 			}
 
-			hasFront := record.Proxied != nil && *record.Proxied
-			checkOrigin = hasFront && !fakeOrigin
+			checkOrigin = !(record.Proxied != nil && *record.Proxied && fakeOrigin)
+			checkProxy = record.Proxied != nil && *record.Proxied
 		case "CNAME":
-			checkOrigin = record.Proxied != nil && *record.Proxied
+			checkProxy = record.Proxied != nil && *record.Proxied
+			checkOrigin = true
 		}
+
 		// Add target for the domain name directly to origin server
 		if checkOrigin {
 			targets[target.Target{
@@ -141,10 +144,12 @@ func (e *CFEnumerator) enumerateDomain(ctx context.Context, zoneID string, ipv6 
 		}
 
 		// Add target for the domain name via CF
-		targets[target.Target{
-			Domain:  record.Name,
-			Address: "",
-		}] = struct{}{}
+		if checkProxy {
+			targets[target.Target{
+				Domain:  record.Name,
+				Address: "",
+			}] = struct{}{}
+		}
 	}
 
 	lbs, err := e.api.ListLoadBalancers(ctx, zoneID)
