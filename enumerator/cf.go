@@ -69,55 +69,41 @@ func (e *CFEnumerator) enumerateAllDomains(ctx context.Context, ipv6 bool) ([]ta
 func (e *CFEnumerator) enumerateDomain(ctx context.Context, zoneID string, ipv6 bool) ([]target.Target, error) {
 	targets := make(map[target.Target]struct{})
 
-	recs, err := e.api.DNSRecords(ctx, zoneID, cloudflare.DNSRecord{Type: "A"})
+	unfilteredRecs, err := e.api.DNSRecords(ctx, zoneID, cloudflare.DNSRecord{})
 	if err != nil {
 		return nil, err
 	}
 
-	if ipv6 {
-		ipv6recs, err := e.api.DNSRecords(ctx, zoneID, cloudflare.DNSRecord{Type: "AAAA"})
-		if err != nil {
-			return nil, err
+	var recs []cloudflare.DNSRecord
+	for _, rec := range unfilteredRecs {
+		switch rec.Type {
+		case "A", "CNAME":
+			recs = append(recs, rec)
+		case "AAAA":
+			if ipv6 {
+				recs = append(recs, rec)
+			}
 		}
-		recs = append(recs, ipv6recs...)
 	}
 
 	for _, record := range recs {
-		ip := net.ParseIP(record.Content)
+		var checkOrigin bool
+		switch record.Type {
+		case "A", "AAAA":
+			ip := net.ParseIP(record.Content)
 
-		var fakeOrigin bool
-		if ip != nil && ip.Equal(CFWorkersBackendAddress) {
-			fakeOrigin = false
-		} else {
-			fakeOrigin = true
+			var fakeOrigin bool
+			if ip != nil && ip.Equal(CFWorkersBackendAddress) {
+				fakeOrigin = false
+			} else {
+				fakeOrigin = true
+			}
+
+			hasFront := record.Proxied != nil && *record.Proxied
+			checkOrigin = hasFront && !fakeOrigin
+		case "CNAME":
+			checkOrigin = record.Proxied != nil && *record.Proxied
 		}
-
-		hasFront := record.Proxied != nil && *record.Proxied
-		checkOrigin := hasFront && !fakeOrigin
-
-		// Add target for the domain name directly to origin server
-		if checkOrigin {
-			targets[target.Target{
-				Domain:  record.Name,
-				Address: record.Content,
-			}] = struct{}{}
-		}
-
-		// Add target for the domain name via CF
-		targets[target.Target{
-			Domain:  record.Name,
-			Address: "",
-		}] = struct{}{}
-	}
-
-	cnameRecs, err := e.api.DNSRecords(ctx, zoneID, cloudflare.DNSRecord{Type: "CNAME"})
-	if err != nil {
-		return nil, err
-	}
-
-	for _, record := range cnameRecs {
-		checkOrigin := record.Proxied != nil && *record.Proxied
-
 		// Add target for the domain name directly to origin server
 		if checkOrigin {
 			targets[target.Target{
