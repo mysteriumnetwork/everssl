@@ -28,19 +28,19 @@ func normalizeZoneName(name string) string {
 }
 
 // ZoneIDByName retrieves a zone's ID from the name.
-func ZoneIDByName(ctx context.Context, api *cloudflare.API, zoneName string) (string, error) {
+func ZoneIDByName(ctx context.Context, api *cloudflare.API, zoneName string) (string, string, error) {
 	zoneName = normalizeZoneName(zoneName)
-	res, err := api.ListZonesContext(ctx, cloudflare.WithZoneFilters(zoneName, api.AccountID, ""))
+	res, err := api.ListZonesContext(ctx, cloudflare.WithZoneFilters(zoneName, "", ""))
 	if err != nil {
-		return "", fmt.Errorf("ListZonesContext command failed: %w", err)
+		return "", "", fmt.Errorf("ListZonesContext command failed: %w", err)
 	}
 
 	switch len(res.Result) {
 	case 0:
-		return "", errors.New("zone could not be found")
+		return "", "", errors.New("zone could not be found")
 	case 1:
-		return res.Result[0].ID, nil
+		return res.Result[0].ID, res.Result[0].Account.ID, nil
 	default:
-		return "", errors.New("ambiguous zone name; an account ID might help")
+		return "", "", errors.New("ambiguous zone name; an account ID might help")
 	}
 }
