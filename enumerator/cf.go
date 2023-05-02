@@ -3,7 +3,6 @@ package enumerator
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"sync"
 
@@ -147,7 +146,6 @@ func (e *CFEnumerator) enumerateDomain(ctx context.Context, accountID, zoneID st
 				Domain:  record.Name,
 				Address: record.Content,
 			}] = struct{}{}
-			log.Printf("new target (origin, %s record): %q -> %q", record.Type, record.Name, record.Content)
 		}
 
 		// Add target for the domain name via CF
@@ -156,7 +154,6 @@ func (e *CFEnumerator) enumerateDomain(ctx context.Context, accountID, zoneID st
 				Domain:  record.Name,
 				Address: "",
 			}] = struct{}{}
-			log.Printf("new target (proxied, %s record): %q -> %q", record.Type, record.Name, record.Name)
 		}
 	}
 
@@ -174,7 +171,6 @@ func (e *CFEnumerator) enumerateDomain(ctx context.Context, accountID, zoneID st
 				Domain:  lb.Name,
 				Address: "",
 			}] = struct{}{}
-			log.Printf("new target (proxied, LB): %q -> %q", lb.Name, "")
 		}
 		pools := lb.DefaultPools
 		pools = append(pools, lb.FallbackPool)
@@ -199,7 +195,6 @@ func (e *CFEnumerator) enumerateDomain(ctx context.Context, accountID, zoneID st
 					Domain:  lb.Name,
 					Address: addr,
 				}] = struct{}{}
-				log.Printf("new target (origin, LB): %q -> %q", lb.Name, addr)
 			}
 		}
 
