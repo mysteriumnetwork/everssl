@@ -19,7 +19,10 @@ const (
 	MaxRetryDelaySecs = 10
 )
 
-var CFWorkersBackendAddress = net.ParseIP("100::")
+var (
+	CFWorkersBackendAddress = net.ParseIP("100::")
+	PlaceholderAddress = net.ParseIP("192.0.2.1")
+)
 
 type CFEnumerator struct {
 	api           *cloudflare.API
@@ -95,6 +98,17 @@ func (e *CFEnumerator) enumerateAllDomains(ctx context.Context, ipv6 bool) ([]ta
 	return result, nil
 }
 
+func isFakeOriginAddress(ip string) bool {
+	parsedIP := net.ParseIP(ip)
+	if parsedIP == nil {
+		return false
+	}
+	if parsedIP.Equal(CFWorkersBackendAddress) || parsedIP.Equal(PlaceholderAddress) {
+		return true
+	}
+	return false
+}
+
 func (e *CFEnumerator) enumerateDomain(ctx context.Context, accountID, zoneID string, ipv6 bool) ([]target.Target, error) {
 	targets := make(map[target.Target]struct{})
 
@@ -120,16 +134,7 @@ func (e *CFEnumerator) enumerateDomain(ctx context.Context, accountID, zoneID st
 		checkProxy := true
 		switch record.Type {
 		case "A", "AAAA":
-			ip := net.ParseIP(record.Content)
-
-			var fakeOrigin bool
-			if ip != nil && ip.Equal(CFWorkersBackendAddress) {
-				fakeOrigin = false
-			} else {
-				fakeOrigin = true
-			}
-
-			checkOrigin = !(record.Proxied != nil && *record.Proxied && fakeOrigin)
+			checkOrigin = !(record.Proxied != nil && *record.Proxied && isFakeOriginAddress(record.Content))
 			checkProxy = record.Proxied != nil && *record.Proxied
 		case "CNAME":
 			checkProxy = record.Proxied != nil && *record.Proxied
