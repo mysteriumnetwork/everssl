@@ -41,7 +41,9 @@ var (
 	ignoreVerificationErrors = flag.Bool("ignore-verification-errors", true, "ignore certificate verification errors")
 	ignoreExpirationErrors   = flag.Bool("ignore-expiration-errors", false, "ignore expiration errors")
 
-	pagerDutyKey = flag.String("pagerduty-key", "", "PagerDuty Events V2 integration key")
+	// reporter options
+	pagerDutyKey  = flag.String("pagerduty-key", "", "PagerDuty Events V2 integration key")
+	verboseReport = flag.Bool("verbose-report", false, "verbose result logging")
 
 	heartbeatURL = flag.String("heartbeat-url", "", "heartbeat URL, URL to GET after successful finish")
 )
@@ -108,11 +110,11 @@ func run() int {
 	var drain reporter.Reporter
 	if *pagerDutyKey == "" {
 		drain = reporter.NewMultiReporter(
-			reporter.NewLogReporter(),
+			reporter.NewLogReporter().SetVerbose(*verboseReport),
 		)
 	} else {
 		drain = reporter.NewMultiReporter(
-			reporter.NewLogReporter(),
+			reporter.NewLogReporter().SetVerbose(*verboseReport),
 			reporter.NewPagerDutyReporter(*pagerDutyKey),
 		)
 	}
