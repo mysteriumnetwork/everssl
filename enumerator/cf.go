@@ -119,7 +119,7 @@ func (e *CFEnumerator) enumerateDomain(ctx context.Context, accountID, zoneID st
 	var recs []cloudflare.DNSRecord
 	for _, rec := range unfilteredRecs {
 		switch rec.Type {
-		case "A", "CNAME":
+		case "A", "CNAME", "NS":
 			recs = append(recs, rec)
 		case "AAAA":
 			if ipv6 {
