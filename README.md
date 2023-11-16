@@ -40,6 +40,8 @@ CLI arguments take precedence over environment variables.
 ```
 $ ./bin/everssl -h
 Usage: ./bin/everssl [OPTIONS...] ZONE...
+  -1-timeout duration
+    	timeout for one connection (default 15s)
   -6	scan IPv6 origins (default true)
   -cf-api-token string
     	Cloudflare API token
@@ -61,8 +63,12 @@ Usage: ./bin/everssl [OPTIONS...] ZONE...
     	PagerDuty Events V2 integration key
   -rate-every duration
     	ratelimit period (inverse of frequency) (default 100ms)
+  -retries int
+    	validation retries (default 3)
   -timeout duration
     	overall scan timeout (default 5m0s)
+  -verbose-report
+    	verbose result logging
   -verify
     	verify certificates (default true)
   -version
